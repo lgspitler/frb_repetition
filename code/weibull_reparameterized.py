@@ -78,9 +78,12 @@ def get_intervals():
         dur = at.TimeDelta(duration[i],format='sec')
         dmcorr = at.TimeDelta(k_DM*FRB_DM/freq[i]**2,format='sec')
 #        print dmcorr
-        ltt_bary = start.light_travel_time(FRB_loc)
-        start_bary = (start.tdb - dmcorr + ltt_bary)
-        end_bary = (start.tdb - dmcorr + dur + ltt_bary)
+        print "Laura: removed barycentering for simulation data"
+#        ltt_bary = start.light_travel_time(FRB_loc)
+#        start_bary = (start.tdb - dmcorr + ltt_bary)
+#        end_bary = (start.tdb - dmcorr + dur + ltt_bary)
+        start_bary=start
+        end_bary=start+dur
         starts.append(start_bary.mjd)
         ends.append(end_bary.mjd)
         if int(nFRB[i]) == 0:
@@ -153,8 +156,8 @@ def get_posterior(thetavals,kvals,intlengths,intminlengths):
 #    diffs = get_differences()
 #    print diffs
 #    intlengths, intminlengths, start, end, times, nFRB = get_intervals()
-    print intminlengths[:,0].min(), intminlengths[:,0].max()
-    print intminlengths[:,1].min(), intminlengths[:,1].max()
+    print "intminlengths[:,0]", intminlengths[:,0].min(), intminlengths[:,0].max()
+    print "intminlengths[:,1]", intminlengths[:,1].min(), intminlengths[:,1].max()
     theta, k = np.meshgrid(thetavals,kvals,indexing='ij')
     post = np.exp(log_post(theta,k,intlengths,intminlengths))
     evidence = post.sum()*(thetavals[1] - thetavals[0])*(kvals[1] - kvals[0])
@@ -168,14 +171,14 @@ def get_posterior(thetavals,kvals,intlengths,intminlengths):
     return post, post_theta, post_k
 
 
-def make_plot(thetavals,kvals,post,post_theta,post_k,ktrue=None,thetatrue=None,save=True,name='weibull_posterior_reparameterized.png'):
+def make_plot(thetavals,kvals,post,post_theta,post_k,ktrue=None,thetatrue=None,save=True,name='weibull_posterior_reparameterized.png', Ttot=3.3, Nburst=17):
     
     thetadiff = thetavals[1] - thetavals[0]
     kdiff = kvals[1] - kvals[0]
 
     def offset(threshold,prob,level):
         """
-             Calcualte the fraction of points within an area defined by a threshold and
+             Calculate the fraction of points within an area defined by a threshold and
              return the difference between that value and the level defined above.
         """
         return prob[prob > threshold].sum()*thetadiff*kdiff - level
@@ -197,12 +200,14 @@ def make_plot(thetavals,kvals,post,post_theta,post_k,ktrue=None,thetatrue=None,s
     pl.xlabel(r'${r}/(\mathrm{day}^{-1})$')
     ax.set_xscale('log')
     ax.set_yscale('log')
-    pl.yticks([0.2,0.3,0.4,0.5,0.6],['0.2','0.3','0.4','0.5','0.6'],rotation='vertical')
+    pl.xlim(0.1, 100)
+#    pl.yticks([0.2,0.3,0.4,0.5,0.6],['0.2','0.3','0.4','0.5','0.6'],rotation='vertical')
     pl.ylabel(r'$k$')
     pl.ylim(10.**-0.8,10.**-0.2)
     if (ktrue and thetatrue):
         pl.plot(thetatrue,ktrue,color=burst_color,marker='+',ms=10)
 
+    #upper panel
     ax = fig.add_axes((0.1,0.7,0.6,0.29))
     ax.set_xscale('log')
     pl.plot(10.**thetavals,post_theta,color=obs_color)
@@ -210,22 +215,24 @@ def make_plot(thetavals,kvals,post,post_theta,post_k,ktrue=None,thetatrue=None,s
     pl.yticks([1,2,3],rotation='vertical')
     pl.ylabel(r'$\mathcal{P}(\log r|N,t)$')
 #    pl.xlim(thetavals.min(),thetavals.max())
-    poiss_post = (3.3*(10.**thetavals))**17.*np.exp(-3.3*(10.**thetavals))
+    pl.xlim(0.1, 100)
+    poiss_post = (Ttot*(10.**thetavals))**Nburst*np.exp(-Ttot*(10.**thetavals))
     poiss_post /= poiss_post.sum()*(thetavals[1] - thetavals[0])
     pl.ylim(0.,1.1*poiss_post.max())
     l, = pl.plot(10.**thetavals,poiss_post,color=poiss_color,linestyle='--')
     l.set_dashes([4,2])
     if thetatrue:
         pl.plot([thetatrue,thetatrue],[0.,10.],color=burst_color)
-    
+
+    #right panel    
     ax = fig.add_axes((0.7,0.1,0.29,0.6))
     ax.set_yscale('log')
     pl.plot(post_k,10.**kvals,color=obs_color)
-    pl.tick_params(axis='y',labelleft=False)
     pl.xticks([1,3,5])
     pl.xlabel(r'$\mathcal{P}(\log k|N,t)$')
     pl.xlim(0.,1.1*post_k.max())
     pl.ylim(10.**-0.8,10.**-0.2)
+    pl.tick_params(axis='y',labelleft=False)
     if ktrue:
         pl.plot([0.,10.],[ktrue,ktrue],color=burst_color)
     
@@ -256,7 +263,8 @@ def get_confident(cum,xvals):
 
 if __name__ == '__main__':
     intlengths, intminlengths, start, end, times, nFRB = get_intervals()
-    
+    Ttot=intlengths.sum() + intminlengths[:,0].sum()
+
     print 'total observing time:', intlengths.sum() + intminlengths[:,0].sum()
     print 'total number of bursts:', nFRB.sum()
     print 'mean difference between bursts:', intlengths.mean()
@@ -290,5 +298,6 @@ if __name__ == '__main__':
     k_cum = post_k.cumsum()*(kvals[1] - kvals[0])
     print 'k interval:', 10.**get_confident(k_cum,kvals)
     print 'theta interval:', 10.**get_confident(theta_cum,thetavals)
-    make_plot(thetavals,kvals,post,post_theta,post_k,ktrue=k,thetatrue=theta,save=True,name='2dpost.pdf')
+    print 'poisson:', nFRB.sum()/Ttot
+    make_plot(thetavals,kvals,post,post_theta,post_k,ktrue=k,thetatrue=theta,save=True,name='2dpost.pdf', Nburst=nFRB.sum(), Ttot=Ttot)
     
